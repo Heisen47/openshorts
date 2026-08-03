@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import subprocess
 import threading
@@ -320,19 +321,31 @@ async def process_endpoint(
     url: Optional[str] = Form(None),
     acknowledged: Optional[str] = Form(None)
 ):
-    api_key = request.headers.get("X-Gemini-Key")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
+    gemini_key = request.headers.get("X-Gemini-Key")
+    openrouter_key = request.headers.get("X-OpenRouter-Key")
+    deepseek_key = request.headers.get("X-DeepSeek-Key")
+    selected_model = request.headers.get("X-Selected-Model", "gemini-2.5-flash")
+    crop_mode = request.headers.get("X-Crop-Mode", "auto")
 
     ack_flag = str(acknowledged).lower() in ("1", "true", "yes")
 
-    # Handle JSON body manually for URL payload
+    # Handle JSON body manually for URL payload / body options
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         body = await request.json()
-        url = body.get("url")
+        url = body.get("url", url)
         ack_flag = bool(body.get("acknowledged"))
+        if body.get("model"):
+            selected_model = body.get("model")
+        if body.get("crop_mode"):
+            crop_mode = body.get("crop_mode")
 
+    # Check key requirement based on model
+    is_openrouter_or_deepseek = selected_model.startswith("deepseek") or selected_model.startswith("qwen") or "/" in selected_model
+    if is_openrouter_or_deepseek and not (openrouter_key or deepseek_key or gemini_key):
+        raise HTTPException(status_code=400, detail="Missing X-OpenRouter-Key or X-DeepSeek-Key header for the selected model.")
+    elif not is_openrouter_or_deepseek and not gemini_key:
+        raise HTTPException(status_code=400, detail="Missing X-Gemini-Key header")
     if not url and not file:
         raise HTTPException(status_code=400, detail="Must provide URL or File")
 
@@ -361,9 +374,16 @@ async def process_endpoint(
     os.makedirs(job_output_dir, exist_ok=True)
 
     # Prepare Command
-    cmd = ["python", "-u", "main.py"] # -u for unbuffered
+    cmd = [sys.executable, "-u", "main.py"] # -u for unbuffered
     env = os.environ.copy()
-    env["GEMINI_API_KEY"] = api_key # Override with key from request
+    if gemini_key:
+        env["GEMINI_API_KEY"] = gemini_key
+    if openrouter_key:
+        env["OPENROUTER_API_KEY"] = openrouter_key
+    if deepseek_key:
+        env["DEEPSEEK_API_KEY"] = deepseek_key
+    
+    cmd.extend(["-m", selected_model, "--crop-mode", crop_mode])
 
     if url:
         cmd.extend(["-u", url])
@@ -393,7 +413,7 @@ async def process_endpoint(
     # Enqueue Job
     jobs[job_id] = {
         'status': 'queued',
-        'logs': [f"Job {job_id} queued."],
+        'logs': [f"Job {job_id} queued with model {selected_model}."],
         'cmd': cmd,
         'env': env,
         'output_dir': job_output_dir,

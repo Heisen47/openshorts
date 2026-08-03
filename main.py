@@ -5,8 +5,7 @@ import subprocess
 import argparse
 import re
 import sys
-from scenedetect import open_video, SceneManager
-from scenedetect.detectors import ContentDetector
+from scenedetect import open_video, SceneManager, ContentDetector
 from ultralytics import YOLO
 import torch
 import os
@@ -424,7 +423,7 @@ def detect_scenes(video_path):
     video = open_video(video_path)
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector())
-    scene_manager.detect_scenes(video=video)
+    scene_manager.detect_scenes(video)
     scene_list = scene_manager.get_scene_list()
     fps = video.frame_rate
     return scene_list, fps
@@ -489,8 +488,7 @@ def download_youtube_video(url, output_dir="."):
         'cachedir': False,
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'android', 'mweb', 'web'],
-                'player_skip': ['webpage', 'configs'],
+                'player_client': ['ios', 'android', 'mweb', 'web']
             }
         },
         'http_headers': {
@@ -575,9 +573,13 @@ Technical Details: {str(e)}
     
     return downloaded_file, sanitized_title
 
-def process_video_to_vertical(input_video, final_output_video):
+def process_video_to_vertical(input_video, final_output_video, crop_mode='auto'):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
+    crop_mode: 
+      - 'auto': AI automatically chooses TRACK for single speakers, GENERAL (fit width) for groups.
+      - 'full': 100% full-screen video (zoom & crop to 9:16, no top/bottom bars).
+      - 'fit': Fit video width inside 9:16 (top & bottom padded with blurred background).
     """
     script_start_time = time.time()
     
@@ -591,13 +593,12 @@ def process_video_to_vertical(input_video, final_output_video):
     if os.path.exists(temp_audio_output): os.remove(temp_audio_output)
     if os.path.exists(final_output_video): os.remove(final_output_video)
 
-    print(f"🎬 Processing clip: {input_video}")
+    print(f"🎬 Processing clip: {input_video} (Crop Mode: {crop_mode})")
     print("   Step 1: Detecting scenes...")
     scenes, fps = detect_scenes(input_video)
     
     if not scenes:
         print("   ❌ No scenes were detected. Using full video as one scene.")
-        # If scene detection fails or finds nothing, treat whole video as one scene
         cap = cv2.VideoCapture(input_video)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
@@ -616,9 +617,14 @@ def process_video_to_vertical(input_video, final_output_video):
     # Initialize Cameraman
     cameraman = SmoothedCameraman(OUTPUT_WIDTH, OUTPUT_HEIGHT, original_width, original_height)
     
-    # --- New Strategy: Per-Scene Analysis ---
-    print("\n   🤖 Step 3: Analyzing Scenes for Strategy (Single vs Group)...")
-    scene_strategies = analyze_scenes_strategy(input_video, scenes)
+    # --- Strategy Selection ---
+    print("\n   🤖 Step 3: Determining Framing Strategy...")
+    if crop_mode == 'full':
+        scene_strategies = ['TRACK'] * len(scenes)
+    elif crop_mode == 'fit':
+        scene_strategies = ['GENERAL'] * len(scenes)
+    else:
+        scene_strategies = analyze_scenes_strategy(input_video, scenes)
     # scene_strategies is a list of 'TRACK' or 'General' corresponding to scenes
     
     print("\n   ✂️ Step 4: Processing video frames...")
@@ -791,21 +797,56 @@ def transcribe_video(video_path):
         'language': info.language
     }
 
-def get_viral_clips(transcript_result, video_duration):
-    print("🤖  Analyzing with Gemini...")
-    
-    api_key = os.getenv("GEMINI_API_KEY")
+def is_openrouter_or_deepseek_model(model_name: str) -> bool:
+    m = model_name.lower()
+    return m.startswith("deepseek") or m.startswith("qwen") or "/" in m
+
+def call_openai_compatible_api(prompt: str, model_name: str):
+    import httpx
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print("❌ Error: GEMINI_API_KEY not found in environment variables.")
-        return None
+        raise ValueError("Missing OPENROUTER_API_KEY or DEEPSEEK_API_KEY in environment variables.")
 
+    if model_name.startswith("deepseek/") or model_name.startswith("qwen/"):
+        endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/openshorts",
+            "X-Title": "OpenShorts"
+        }
+    elif "deepseek" in model_name and not "/" in model_name:
+        endpoint = "https://api.deepseek.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+    else:
+        endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
 
-    client = genai.Client(api_key=api_key)
-    
-    # We use gemini-2.5-flash as requested.
-    model_name = 'gemini-2.5-flash' 
-    
-    print(f"🤖  Initializing Gemini with model: {model_name}")
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": "You are an expert viral video editor and content strategist. Respond strictly in valid JSON format."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7
+    }
+
+    with httpx.Client(timeout=120.0) as client:
+        res = client.post(endpoint, headers=headers, json=payload)
+        res.raise_for_status()
+        data = res.json()
+        content = data['choices'][0]['message']['content']
+        usage = data.get("usage", {})
+        return content, usage
+
+def get_viral_clips(transcript_result, video_duration, model_name="gemini-2.5-flash"):
+    print(f"🤖  Analyzing with AI model: {model_name}...")
 
     # Extract words
     words = []
@@ -823,65 +864,110 @@ def get_viral_clips(transcript_result, video_duration):
         words_json=json.dumps(words)
     )
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt
-        )
-        
-        # --- Cost Calculation ---
+    if is_openrouter_or_deepseek_model(model_name):
         try:
-            usage = response.usage_metadata
+            text, usage = call_openai_compatible_api(prompt, model_name)
+            cost_analysis = None
             if usage:
-                # Gemini 2.5 Flash Pricing (Dec 2025)
-                # Input: $0.10 per 1M tokens
-                # Output: $0.40 per 1M tokens
-                
-                input_price_per_million = 0.10
-                output_price_per_million = 0.40
-                
-                prompt_tokens = usage.prompt_token_count
-                output_tokens = usage.candidates_token_count
-                
-                input_cost = (prompt_tokens / 1_000_000) * input_price_per_million
-                output_cost = (output_tokens / 1_000_000) * output_price_per_million
-                total_cost = input_cost + output_cost
-                
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
                 cost_analysis = {
                     "input_tokens": prompt_tokens,
-                    "output_tokens": output_tokens,
-                    "input_cost": input_cost,
-                    "output_cost": output_cost,
-                    "total_cost": total_cost,
+                    "output_tokens": completion_tokens,
                     "model": model_name
                 }
+                print(f"💰 Token Usage ({model_name}): Input={prompt_tokens}, Output={completion_tokens}")
 
-                print(f"💰 Token Usage ({model_name}):")
-                print(f"   - Input Tokens: {prompt_tokens} (${input_cost:.6f})")
-                print(f"   - Output Tokens: {output_tokens} (${output_cost:.6f})")
-                print(f"   - Total Estimated Cost: ${total_cost:.6f}")
-                
+            text = text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                text = text[start_idx:end_idx + 1]
+
+            result_json = json.loads(text)
+            if cost_analysis:
+                result_json['cost_analysis'] = cost_analysis
+            return result_json
         except Exception as e:
-            print(f"⚠️ Could not calculate cost: {e}")
-            cost_analysis = None
-        # ------------------------
+            print(f"❌ OpenRouter/DeepSeek Error ({model_name}): {e}")
+            return None
+    else:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("❌ Error: GEMINI_API_KEY not found in environment variables.")
+            return None
 
-        # Clean response if it contains markdown code blocks
-        text = response.text
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-        
-        result_json = json.loads(text)
-        if cost_analysis:
-            result_json['cost_analysis'] = cost_analysis
+        client = genai.Client(api_key=api_key)
+        print(f"🤖  Initializing Gemini with model: {model_name}")
+
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
             
-        return result_json
-    except Exception as e:
-        print(f"❌ Gemini Error: {e}")
-        return None
+            # --- Cost Calculation ---
+            try:
+                usage = response.usage_metadata
+                if usage:
+                    input_price_per_million = 0.10
+                    output_price_per_million = 0.40
+                    
+                    prompt_tokens = usage.prompt_token_count
+                    output_tokens = usage.candidates_token_count
+                    
+                    input_cost = (prompt_tokens / 1_000_000) * input_price_per_million
+                    output_cost = (output_tokens / 1_000_000) * output_price_per_million
+                    total_cost = input_cost + output_cost
+                    
+                    cost_analysis = {
+                        "input_tokens": prompt_tokens,
+                        "output_tokens": output_tokens,
+                        "input_cost": input_cost,
+                        "output_cost": output_cost,
+                        "total_cost": total_cost,
+                        "model": model_name
+                    }
+
+                    print(f"💰 Token Usage ({model_name}):")
+                    print(f"   - Input Tokens: {prompt_tokens} (${input_cost:.6f})")
+                    print(f"   - Output Tokens: {output_tokens} (${output_cost:.6f})")
+                    print(f"   - Total Estimated Cost: ${total_cost:.6f}")
+                    
+            except Exception as e:
+                print(f"⚠️ Could not calculate cost: {e}")
+                cost_analysis = None
+            # ------------------------
+
+            # Clean response if it contains markdown code blocks
+            text = response.text
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+            
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                text = text[start_idx:end_idx + 1]
+
+            result_json = json.loads(text)
+            if cost_analysis:
+                result_json['cost_analysis'] = cost_analysis
+                
+            return result_json
+        except Exception as e:
+            print(f"❌ Gemini Error: {e}")
+            return None
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="AutoCrop-Vertical with Viral Clip Detection.")
@@ -891,6 +977,8 @@ if __name__ == '__main__':
     input_group.add_argument('-u', '--url', type=str, help="YouTube URL to download and process.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
+    parser.add_argument('-m', '--model', type=str, default='gemini-2.5-flash', help="AI model name for clip detection.")
+    parser.add_argument('--crop-mode', type=str, choices=['auto', 'full', 'fit'], default='auto', help="Framing mode: 'full' (100% video, no bars), 'fit' (fit width with blurred bars), 'auto' (smart AI).")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
     
@@ -906,12 +994,9 @@ if __name__ == '__main__':
     
     # 1. Get Input Video
     if args.url:
-        # For multi-clip runs, treat --output as an OUTPUT DIRECTORY (create it if needed).
-        # For whole-video runs (--skip-analysis), --output can be a file path.
         if args.output and not args.skip_analysis:
             output_dir = _ensure_dir(args.output)
         else:
-            # If output is a directory, use it; if it's a filename, use its directory; else default "."
             if args.output and os.path.isdir(args.output):
                 output_dir = args.output
             elif args.output and not os.path.isdir(args.output):
@@ -925,10 +1010,8 @@ if __name__ == '__main__':
         video_title = os.path.splitext(os.path.basename(input_video))[0]
         
         if args.output and not args.skip_analysis:
-            # For multi-clip runs, treat --output as an OUTPUT DIRECTORY (create it if needed).
             output_dir = _ensure_dir(args.output)
         else:
-            # If output is a directory, use it; if it's a filename, use its directory; else default to input dir.
             if args.output and os.path.isdir(args.output):
                 output_dir = args.output
             elif args.output and not os.path.isdir(args.output):
@@ -944,7 +1027,7 @@ if __name__ == '__main__':
     if args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
-        process_video_to_vertical(input_video, output_file)
+        process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode)
     else:
         # 3. Transcribe
         transcript = transcribe_video(input_video)
@@ -956,13 +1039,13 @@ if __name__ == '__main__':
         duration = frame_count / fps
         cap.release()
 
-        # 4. Gemini Analysis
-        clips_data = get_viral_clips(transcript, duration)
+        # 4. AI Analysis
+        clips_data = get_viral_clips(transcript, duration, model_name=args.model)
         
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
             output_file = os.path.join(output_dir, f"{video_title}_vertical.mp4")
-            process_video_to_vertical(input_video, output_file)
+            process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode)
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             
@@ -986,7 +1069,6 @@ if __name__ == '__main__':
                 clip_final_path = os.path.join(output_dir, clip_filename)
                 
                 # ffmpeg cut
-                # Using re-encoding for precision as requested by strict seconds
                 cut_command = [
                     'ffmpeg', '-y', 
                     '-ss', str(start), 
@@ -999,7 +1081,7 @@ if __name__ == '__main__':
                 subprocess.run(cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 
                 # Process vertical
-                success = process_video_to_vertical(clip_temp_path, clip_final_path)
+                success = process_video_to_vertical(clip_temp_path, clip_final_path, crop_mode=args.crop_mode)
                 
                 if success:
                     print(f"   ✅ Clip {i+1} ready: {clip_final_path}")

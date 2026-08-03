@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
-import KeyInput from './components/KeyInput';
+import KeyInput, { MODEL_OPTIONS } from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
 import ProcessingAnimation from './components/ProcessingAnimation';
@@ -135,6 +135,31 @@ const pollJob = async (jobId) => {
 
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
+  const [openRouterKey, setOpenRouterKey] = useState(() => localStorage.getItem('openrouter_key') || '');
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('selected_model') || 'gemini-2.5-flash');
+
+  const [cropMode, setCropMode] = useState(() => localStorage.getItem('crop_mode') || 'auto');
+
+  const handleSetApiKey = (key) => {
+    setApiKey(key);
+    localStorage.setItem('gemini_key', key);
+  };
+
+  const handleSetOpenRouterKey = (key) => {
+    setOpenRouterKey(key);
+    localStorage.setItem('openrouter_key', key);
+  };
+
+  const handleSelectModel = (model) => {
+    setSelectedModel(model);
+    localStorage.setItem('selected_model', model);
+  };
+
+  const handleSelectCropMode = (mode) => {
+    setCropMode(mode);
+    localStorage.setItem('crop_mode', mode);
+  };
+
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
     const stored = localStorage.getItem('uploadPostKey_v3');
@@ -321,32 +346,45 @@ function App() {
   };
 
   const handleProcess = async (data) => {
-    if (!apiKey || !uploadPostKey) {
+    const isChineseModel = selectedModel.startsWith("deepseek") || selectedModel.startsWith("qwen") || selectedModel.includes("/");
+    if (!isChineseModel && (!apiKey || !uploadPostKey)) {
       setShowKeyModal(true);
       return;
     }
+    if (isChineseModel && !openRouterKey && !apiKey) {
+      setShowKeyModal(true);
+      return;
+    }
+
     setStatus('processing');
-    setLogs(["Starting process..."]);
+    setLogs([`Starting process with model ${selectedModel}...`]);
     setResults(null);
     setProcessingMedia(data);
 
     try {
       let body;
-      const headers = { 'X-Gemini-Key': apiKey };
+      const headers = { 
+        'X-Gemini-Key': apiKey || '',
+        'X-OpenRouter-Key': openRouterKey || '',
+        'X-Selected-Model': selectedModel,
+        'X-Crop-Mode': cropMode
+      };
 
       if (data.type === 'url') {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({ url: data.payload, acknowledged: !!data.acknowledged });
+        body = JSON.stringify({ url: data.payload, model: selectedModel, crop_mode: cropMode, acknowledged: !!data.acknowledged });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
+        formData.append('model', selectedModel);
+        formData.append('crop_mode', cropMode);
         formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
         body = formData;
       }
 
       const res = await fetch(getApiUrl('/api/process'), {
         method: 'POST',
-        headers: data.type === 'url' ? headers : { 'X-Gemini-Key': apiKey },
+        headers,
         body
       });
 
@@ -571,7 +609,14 @@ function App() {
                   <Shield size={12} /> Privacy: keys only live in your browser (sent to backend just to process)
                 </div>
               </div>
-              <KeyInput onKeySet={setApiKey} savedKey={apiKey} />
+              <KeyInput 
+                onKeySet={handleSetApiKey} 
+                savedKey={apiKey} 
+                savedOpenRouterKey={openRouterKey} 
+                onOpenRouterKeySet={handleSetOpenRouterKey} 
+                selectedModel={selectedModel} 
+                onModelSelect={handleSelectModel} 
+              />
 
               <div className={`glass-panel p-6 mt-8 ${!uploadPostKey ? 'border-amber-500/30 ring-1 ring-amber-500/20' : ''}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -871,6 +916,49 @@ function App() {
                   <p className="text-zinc-400 text-lg">
                     Drop your long-form video below to instantly generate viral clips with AI.
                   </p>
+                </div>
+
+                {/* Model & Framing Selector Control Bar */}
+                <div className="w-full bg-surface border border-white/5 rounded-2xl p-4 text-left shadow-lg space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* AI Model Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-400 shrink-0" /> AI Model
+                      </label>
+                      <select
+                        value={selectedModel}
+                        onChange={(e) => handleSelectModel(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 text-white text-xs font-medium rounded-xl px-3 py-2 focus:outline-none focus:border-primary transition-colors cursor-pointer truncate"
+                      >
+                        {MODEL_OPTIONS.map((group, gIdx) => (
+                          <optgroup key={gIdx} label={group.category}>
+                            {group.items.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} ({item.badge})
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Framing Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                        <FileVideo size={14} className="text-primary shrink-0" /> Video Framing (9:16)
+                      </label>
+                      <select
+                        value={cropMode}
+                        onChange={(e) => handleSelectCropMode(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 text-white text-xs font-medium rounded-xl px-3 py-2 focus:outline-none focus:border-primary transition-colors cursor-pointer truncate"
+                      >
+                        <option value="auto">🤖 Smart Auto AI (Recommended)</option>
+                        <option value="full">📱 Full Screen (100% Video, No Bars)</option>
+                        <option value="fit">🖼️ Fit Width (Blurred Top/Bottom)</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <MediaInput onProcess={handleProcess} isProcessing={status === 'processing'} />

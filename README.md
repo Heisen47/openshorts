@@ -1,11 +1,12 @@
-# OpenShorts.app
+# OpenShorts (Fork)
 
+> **⚠️ This is a personal fork of [mutonby/openshorts](https://github.com/mutonby/openshorts), modified for my own needs.**
+>
+> All credit for the original project goes to the original author. This fork adds custom features like multi-model LLM support (DeepSeek, Qwen via OpenRouter), configurable 9:16 video framing modes, and other tweaks. For the official project, visit the [original repository](https://github.com/mutonby/openshorts).
+
+[![Forked From](https://img.shields.io/badge/Forked%20From-mutonby%2Fopenshorts-blue?logo=github)](https://github.com/mutonby/openshorts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Open Source](https://badges.frapsoft.com/os/v1/open-source.svg?v=103)](https://opensource.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![GitHub stars](https://img.shields.io/github/stars/mutonby/openshorts?style=social)](https://github.com/mutonby/openshorts)
-[![Last Commit](https://img.shields.io/github/last-commit/mutonby/openshorts)](https://github.com/mutonby/openshorts/commits/main)
 
 **Free & open source AI video platform** with 3 tools in one: **Clip Generator**, **AI Shorts (UGC videos with AI actors)**, and **YouTube Studio**. Self-hosted with Docker. No watermarks, no limits.
 

@@ -60,7 +60,7 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
       "video_description_for_tiktok": "<description for TikTok oriented to get views>",
       "video_description_for_instagram": "<description for Instagram oriented to get views>",
       "video_title_for_youtube_short": "<title for YouTube Short oriented to get views 100 chars max>",
-      "viral_hook_text": "<SHORT punchy text overlay (max 10 words). MUST BE IN THE SAME LANGUAGE AS THE VIDEO TRANSCRIPT. Examples: 'POV: You realized...', 'Did you know?', 'Stop doing this!'>"
+      "viral_hook_text": "<SHORT, HILARIOUS & RELATABLE text overlay (max 8-10 words). Make it funny, sarcastic, meme-worthy, or highly relatable to maximize viewer retention on TikTok/Reels. Examples: 'POV: You realized...', 'My last 2 brain cells when...', 'Nobody:', 'Why is this so accurate...', 'Tell me you're X without telling me...', 'I was today years old when...'>"
     }}
   ]
 }}
@@ -571,9 +571,48 @@ Technical Details: {str(e)}
     step_end_time = time.time()
     print(f"✅ Video downloaded in {step_end_time - step_start_time:.2f}s: {downloaded_file}")
     
-    return downloaded_file, sanitized_title
+def draw_end_cta_overlay(frame, text="LIKE & FOLLOW FOR MORE!"):
+    """
+    Overlays a sleek Call-To-Action end card during the final seconds of a video clip.
+    """
+    h, w, _ = frame.shape
+    banner_h = 110
+    banner_w = int(w * 0.88)
+    banner_x = (w - banner_w) // 2
+    banner_y = int(h * 0.78)
 
-def process_video_to_vertical(input_video, final_output_video, crop_mode='auto'):
+    overlay = frame.copy()
+    # Dark background box
+    cv2.rectangle(overlay, (banner_x, banner_y), (banner_x + banner_w, banner_y + banner_h), (15, 15, 20), -1)
+    
+    # Gold accent border
+    cv2.rectangle(overlay, (banner_x, banner_y), (banner_x + banner_w, banner_y + banner_h), (0, 215, 255), 3)
+
+    # Semi-transparent blending
+    cv2.addWeighted(overlay, 0.88, frame, 0.12, 0, frame)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.95
+    thickness = 2
+
+    # Clean text for OpenCV rendering
+    clean_text = text.encode('ascii', 'ignore').decode('ascii').strip()
+    if not clean_text:
+        clean_text = "LIKE & FOLLOW FOR MORE!"
+
+    (text_w, text_h), _ = cv2.getTextSize(clean_text, font, font_scale, thickness)
+    text_x = banner_x + (banner_w - text_w) // 2
+    text_y = banner_y + (banner_h + text_h) // 2
+
+    # Black text outline
+    cv2.putText(frame, clean_text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 3, cv2.LINE_AA)
+    # Bright white text
+    cv2.putText(frame, clean_text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+    return frame
+
+
+def process_video_to_vertical(input_video, final_output_video, crop_mode='auto', end_cta="LIKE & FOLLOW FOR MORE!"):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     crop_mode: 
@@ -702,6 +741,12 @@ def process_video_to_vertical(input_video, final_output_video, crop_mode='auto')
                     output_frame = cv2.resize(cropped, (OUTPUT_WIDTH, OUTPUT_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
                 else:
                     output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
+
+            # Apply End-of-Clip Call-To-Action overlay in final 2.5 seconds
+            if end_cta:
+                cta_frames = int(2.5 * fps)
+                if total_frames > cta_frames and frame_number >= (total_frames - cta_frames):
+                    output_frame = draw_end_cta_overlay(output_frame, text=end_cta)
 
             ffmpeg_process.stdin.write(output_frame.tobytes())
             frame_number += 1
@@ -979,6 +1024,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('-m', '--model', type=str, default='gemini-2.5-flash', help="AI model name for clip detection.")
     parser.add_argument('--crop-mode', type=str, choices=['auto', 'full', 'fit'], default='auto', help="Framing mode: 'full' (100% video, no bars), 'fit' (fit width with blurred bars), 'auto' (smart AI).")
+    parser.add_argument('--end-cta', type=str, default="LIKE & FOLLOW FOR MORE!", help="Call-To-Action text for end-of-clip banner frame.")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
     
@@ -1023,11 +1069,15 @@ if __name__ == '__main__':
         print(f"❌ Input file not found: {input_video}")
         exit(1)
 
+    # Parse End CTA text (disabled if empty, "none", "false", or "off")
+    raw_end_cta = args.end_cta.strip() if args.end_cta else ""
+    end_cta_text = raw_end_cta if (raw_end_cta and raw_end_cta.lower() not in ('none', 'false', '0', 'off', '')) else None
+
     # 2. Decision: Analyze clips or process whole?
     if args.skip_analysis:
         print("⏩ Skipping analysis, processing entire video...")
         output_file = args.output if args.output else os.path.join(output_dir, f"{video_title}_vertical.mp4")
-        process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode)
+        process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode, end_cta=end_cta_text)
     else:
         # 3. Transcribe
         transcript = transcribe_video(input_video)
@@ -1045,7 +1095,7 @@ if __name__ == '__main__':
         if not clips_data or 'shorts' not in clips_data:
             print("❌ Failed to identify clips. Converting whole video as fallback.")
             output_file = os.path.join(output_dir, f"{video_title}_vertical.mp4")
-            process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode)
+            process_video_to_vertical(input_video, output_file, crop_mode=args.crop_mode, end_cta=end_cta_text)
         else:
             print(f"🔥 Found {len(clips_data['shorts'])} viral clips!")
             
@@ -1081,7 +1131,7 @@ if __name__ == '__main__':
                 subprocess.run(cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 
                 # Process vertical
-                success = process_video_to_vertical(clip_temp_path, clip_final_path, crop_mode=args.crop_mode)
+                success = process_video_to_vertical(clip_temp_path, clip_final_path, crop_mode=args.crop_mode, end_cta=end_cta_text)
                 
                 if success:
                     print(f"   ✅ Clip {i+1} ready: {clip_final_path}")

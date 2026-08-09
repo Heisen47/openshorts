@@ -139,6 +139,8 @@ function App() {
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('selected_model') || 'gemini-2.5-flash');
 
   const [cropMode, setCropMode] = useState(() => localStorage.getItem('crop_mode') || 'auto');
+  const [enableEndCta, setEnableEndCta] = useState(() => localStorage.getItem('enable_end_cta') !== 'false');
+  const [endCtaText, setEndCtaText] = useState(() => localStorage.getItem('end_cta_text') || 'LIKE & FOLLOW FOR MORE!');
 
   const handleSetApiKey = (key) => {
     setApiKey(key);
@@ -158,6 +160,16 @@ function App() {
   const handleSelectCropMode = (mode) => {
     setCropMode(mode);
     localStorage.setItem('crop_mode', mode);
+  };
+
+  const handleToggleEndCta = (enabled) => {
+    setEnableEndCta(enabled);
+    localStorage.setItem('enable_end_cta', enabled ? 'true' : 'false');
+  };
+
+  const handleUpdateEndCtaText = (text) => {
+    setEndCtaText(text);
+    localStorage.setItem('end_cta_text', text);
   };
 
   // Social API State - Load encrypted or plain
@@ -363,21 +375,24 @@ function App() {
 
     try {
       let body;
+      const activeCta = enableEndCta ? (endCtaText || 'LIKE & FOLLOW FOR MORE!') : 'none';
       const headers = { 
         'X-Gemini-Key': apiKey || '',
         'X-OpenRouter-Key': openRouterKey || '',
         'X-Selected-Model': selectedModel,
-        'X-Crop-Mode': cropMode
+        'X-Crop-Mode': cropMode,
+        'X-End-CTA': activeCta
       };
 
       if (data.type === 'url') {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({ url: data.payload, model: selectedModel, crop_mode: cropMode, acknowledged: !!data.acknowledged });
+        body = JSON.stringify({ url: data.payload, model: selectedModel, crop_mode: cropMode, end_cta: activeCta, acknowledged: !!data.acknowledged });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
         formData.append('model', selectedModel);
         formData.append('crop_mode', cropMode);
+        formData.append('end_cta', activeCta);
         formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
         body = formData;
       }
@@ -918,9 +933,9 @@ function App() {
                   </p>
                 </div>
 
-                {/* Model & Framing Selector Control Bar */}
+                {/* Model, Framing & End CTA Selector Control Bar */}
                 <div className="w-full bg-surface border border-white/5 rounded-2xl p-4 text-left shadow-lg space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* AI Model Selector */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
@@ -957,6 +972,38 @@ function App() {
                         <option value="full">📱 Full Screen (100% Video, No Bars)</option>
                         <option value="fit">🖼️ Fit Width (Blurred Top/Bottom)</option>
                       </select>
+                    </div>
+
+                    {/* Permanent End CTA Selector & Remove Toggle Button */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                          <Share2 size={14} className="text-emerald-400 shrink-0" /> End CTA Frame
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEndCta(!enableEndCta)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+                            enableEndCta
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30'
+                          }`}
+                        >
+                          {enableEndCta ? 'ON (Click to Remove)' : 'OFF (Click to Enable)'}
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={endCtaText}
+                        disabled={!enableEndCta}
+                        onChange={(e) => handleUpdateEndCtaText(e.target.value)}
+                        placeholder="LIKE & FOLLOW FOR MORE!"
+                        className={`w-full bg-black/40 border text-xs font-medium rounded-xl px-3 py-2 focus:outline-none transition-colors truncate ${
+                          enableEndCta
+                            ? 'border-white/10 text-white focus:border-primary'
+                            : 'border-white/5 text-zinc-600 cursor-not-allowed opacity-50'
+                        }`}
+                      />
                     </div>
                   </div>
                 </div>

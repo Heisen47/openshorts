@@ -329,6 +329,8 @@ async def process_endpoint(
 
     ack_flag = str(acknowledged).lower() in ("1", "true", "yes")
 
+    end_cta = request.headers.get("X-End-CTA", "LIKE & FOLLOW FOR MORE!")
+
     # Handle JSON body manually for URL payload / body options
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
@@ -339,6 +341,8 @@ async def process_endpoint(
             selected_model = body.get("model")
         if body.get("crop_mode"):
             crop_mode = body.get("crop_mode")
+        if body.get("end_cta") is not None:
+            end_cta = body.get("end_cta")
 
     # Check key requirement based on model
     is_openrouter_or_deepseek = selected_model.startswith("deepseek") or selected_model.startswith("qwen") or "/" in selected_model
@@ -384,6 +388,10 @@ async def process_endpoint(
         env["DEEPSEEK_API_KEY"] = deepseek_key
     
     cmd.extend(["-m", selected_model, "--crop-mode", crop_mode])
+    if end_cta and str(end_cta).strip().lower() not in ("none", "false", "0", ""):
+        cmd.extend(["--end-cta", str(end_cta)])
+    else:
+        cmd.extend(["--end-cta", "none"])
 
     if url:
         cmd.extend(["-u", url])

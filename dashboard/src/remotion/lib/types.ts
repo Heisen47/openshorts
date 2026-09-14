@@ -33,6 +33,7 @@ export interface SubtitleConfig {
 export type HookPosition = "top" | "center" | "bottom";
 export type HookSize = "S" | "M" | "L";
 export type HookEntrance = "spring" | "fade" | "slide-up" | "none";
+export type HookTheme = "obsidian" | "cyber" | "minimal" | "clean-white";
 
 export interface HookConfig {
   text: string;
@@ -40,6 +41,7 @@ export interface HookConfig {
   size: HookSize;
   entranceAnimation: HookEntrance;
   displayDurationSec: number;
+  theme?: HookTheme;
 }
 
 // --- Effects config ---
@@ -68,6 +70,7 @@ export interface ShortVideoProps {
   subtitles: SubtitleConfig | null;
   hook: HookConfig | null;
   effects: EffectsConfig | null;
+  endCta?: string | boolean | null;
 }
 
 // --- Zod schemas for validation (used by render service) ---
@@ -101,6 +104,7 @@ export const hookConfigSchema = z.object({
   size: z.enum(["S", "M", "L"]),
   entranceAnimation: z.enum(["spring", "fade", "slide-up", "none"]),
   displayDurationSec: z.number().positive(),
+  theme: z.enum(["obsidian", "cyber", "minimal", "clean-white"]).optional(),
 });
 
 export const effectSegmentSchema = z.object({
@@ -127,4 +131,5 @@ export const shortVideoPropsSchema = z.object({
   subtitles: subtitleConfigSchema.nullable(),
   hook: hookConfigSchema.nullable(),
   effects: effectsConfigSchema.nullable(),
+  endCta: z.union([z.string(), z.boolean()]).nullable().optional(),
 });

@@ -69,6 +69,7 @@ export async function executeRender(params: RenderParams): Promise<void> {
       composition,
       serveUrl: bundleLocation,
       codec: "h264",
+      pixelFormat: "yuv420p",
       crf: 22,
       outputLocation,
       onProgress: ({ progress }) => {

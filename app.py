@@ -329,7 +329,7 @@ async def process_endpoint(
 
     ack_flag = str(acknowledged).lower() in ("1", "true", "yes")
 
-    end_cta = request.headers.get("X-End-CTA", "LIKE & FOLLOW FOR MORE!")
+    end_cta = request.headers.get("X-End-CTA", "Follow me for more such content")
 
     # Handle JSON body manually for URL payload / body options
     content_type = request.headers.get("content-type", "")
@@ -897,6 +897,7 @@ class HookRequest(BaseModel):
     input_filename: Optional[str] = None
     position: Optional[str] = "top" # top, center, bottom
     size: Optional[str] = "M" # S, M, L
+    theme: Optional[str] = "obsidian" # obsidian, cyber, clean-white, minimal
 
 @app.post("/api/hook")
 async def add_hook(req: HookRequest):
@@ -939,11 +940,12 @@ async def add_hook(req: HookRequest):
     # Map Size to Scale
     size_map = {"S": 0.8, "M": 1.0, "L": 1.3}
     font_scale = size_map.get(req.size, 1.0)
+    hook_theme = req.theme or "obsidian"
     
     try:
         # Run in thread pool
         def run_hook():
-             add_hook_to_video(input_path, req.text, output_path, position=req.position, font_scale=font_scale)
+             add_hook_to_video(input_path, req.text, output_path, position=req.position, font_scale=font_scale, theme=hook_theme)
         
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, run_hook)

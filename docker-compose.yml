@@ -9,6 +9,12 @@ services:
       - /app/__pycache__
       - ./output:/app/output
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config')\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   frontend:
     build: ./dashboard
@@ -18,9 +24,13 @@ services:
     volumes:
       - ./dashboard:/app
       - /app/node_modules
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - RENDERER_URL=http://renderer:3100
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   renderer:
     build:
@@ -37,4 +47,5 @@ services:
       - PORT=3100
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy

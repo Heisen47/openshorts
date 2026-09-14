@@ -140,7 +140,10 @@ function App() {
 
   const [cropMode, setCropMode] = useState(() => localStorage.getItem('crop_mode') || 'auto');
   const [enableEndCta, setEnableEndCta] = useState(() => localStorage.getItem('enable_end_cta') !== 'false');
-  const [endCtaText, setEndCtaText] = useState(() => localStorage.getItem('end_cta_text') || 'LIKE & FOLLOW FOR MORE!');
+  const [endCtaText, setEndCtaText] = useState(() => {
+    const saved = localStorage.getItem('end_cta_text');
+    return (saved && saved !== 'LIKE & FOLLOW FOR MORE!' && saved !== 'Follow for more such content') ? saved : 'Follow me for more such content';
+  });
 
   const handleSetApiKey = (key) => {
     setApiKey(key);
@@ -302,10 +305,12 @@ function App() {
 
   useEffect(() => {
     let interval;
+    let consecutiveErrors = 0;
     if ((status === 'processing' || status === 'completed') && jobId) {
       interval = setInterval(async () => {
         try {
           const data = await pollJob(jobId);
+          consecutiveErrors = 0; // Reset on success
           console.log("Job status:", data);
 
           // Update results if available (real-time)
@@ -326,7 +331,14 @@ function App() {
             if (data.logs) setLogs(data.logs);
           }
         } catch (e) {
-          console.error("Polling error", e);
+          consecutiveErrors++;
+          console.error("Polling error", e, `(attempt ${consecutiveErrors})`);
+          // After 5 consecutive failures (~10s), assume backend restarted and job is lost
+          if (consecutiveErrors >= 5) {
+            setStatus('error');
+            setLogs(prev => [...prev, "❌ Lost connection to backend. The server may have restarted during processing. Please try again."]);
+            clearInterval(interval);
+          }
         }
       }, 2000);
     }
@@ -359,7 +371,7 @@ function App() {
 
   const handleProcess = async (data) => {
     const isChineseModel = selectedModel.startsWith("deepseek") || selectedModel.startsWith("qwen") || selectedModel.includes("/");
-    if (!isChineseModel && (!apiKey || !uploadPostKey)) {
+    if (!isChineseModel && !apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -375,7 +387,7 @@ function App() {
 
     try {
       let body;
-      const activeCta = enableEndCta ? (endCtaText || 'LIKE & FOLLOW FOR MORE!') : 'none';
+      const activeCta = enableEndCta ? (endCtaText || 'Follow me for more such content') : 'none';
       const headers = { 
         'X-Gemini-Key': apiKey || '',
         'X-OpenRouter-Key': openRouterKey || '',
@@ -556,36 +568,28 @@ function App() {
               />
             )}
 
-            {(!apiKey || !uploadPostKey) && (
+            {!apiKey && (
               <button
                 onClick={() => setActiveTab('settings')}
                 className="text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1.5"
                 title="Click to configure your API keys"
               >
                 <AlertTriangle size={12} />
-                {!apiKey && !uploadPostKey
-                  ? 'Gemini & Upload-Post keys missing'
-                  : !apiKey
-                    ? 'Gemini API Key Missing'
-                    : 'Upload-Post API Key Missing'}
+                Gemini API Key Missing
               </button>
             )}
           </div>
         </header>
 
         {/* Persistent Missing Keys Banner — visible on every screen */}
-        {(!apiKey || !uploadPostKey) && activeTab !== 'settings' && (
+        {!apiKey && activeTab !== 'settings' && (
           <div className="mx-6 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-4 shrink-0 animate-[fadeIn_0.3s_ease-out]">
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
               <div>
-                <span className="font-semibold">Required API keys missing.</span>{' '}
+                <span className="font-semibold">Required API key missing.</span>{' '}
                 <span className="text-amber-200/80">
-                  {!apiKey && !uploadPostKey
-                    ? 'Set your Gemini and Upload-Post API keys to use OpenShorts.'
-                    : !apiKey
-                      ? 'Set your Gemini API key to use OpenShorts.'
-                      : 'Set your Upload-Post API key to use OpenShorts.'}
+                  Set your Gemini API key to use OpenShorts.
                 </span>
               </div>
             </div>
@@ -633,13 +637,13 @@ function App() {
                 onModelSelect={handleSelectModel} 
               />
 
-              <div className={`glass-panel p-6 mt-8 ${!uploadPostKey ? 'border-amber-500/30 ring-1 ring-amber-500/20' : ''}`}>
+              <div className="glass-panel p-6 mt-8">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Social Integration</h2>
-                  <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded text-amber-400 uppercase tracking-wider">Required</span>
+                  <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-zinc-500 uppercase tracking-wider">Optional</span>
                 </div>
                 <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  Required to publish your clips to TikTok, Instagram Reels, and YouTube Shorts via <strong>Upload-Post</strong>.
+                  Optional: publish your clips to TikTok, Instagram Reels, and YouTube Shorts via <strong>Upload-Post</strong>.
                   Includes a <strong>free tier</strong> (no credit card required).
                 </p>
                 <div className="space-y-4">
@@ -997,7 +1001,7 @@ function App() {
                         value={endCtaText}
                         disabled={!enableEndCta}
                         onChange={(e) => handleUpdateEndCtaText(e.target.value)}
-                        placeholder="LIKE & FOLLOW FOR MORE!"
+                        placeholder="Follow me for more such content"
                         className={`w-full bg-black/40 border text-xs font-medium rounded-xl px-3 py-2 focus:outline-none transition-colors truncate ${
                           enableEndCta
                             ? 'border-white/10 text-white focus:border-primary'
@@ -1146,14 +1150,10 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowKeyModal(false)}>
           <div className="bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-white">
-              {!apiKey && !uploadPostKey
-                ? 'Required API Keys Missing'
-                : !apiKey
-                  ? 'Gemini API Key Required'
-                  : 'Upload-Post API Key Required'}
+              Gemini API Key Required
             </h2>
             <p className="text-sm text-zinc-400">
-              OpenShorts needs both a <strong className="text-zinc-200">Gemini</strong> API key and an <strong className="text-zinc-200">Upload-Post</strong> API key. Both have free tiers.
+              OpenShorts needs a <strong className="text-zinc-200">Gemini</strong> API key to analyze video content. Free tier available.
             </p>
 
             {/* Gemini block */}

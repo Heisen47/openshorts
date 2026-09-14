@@ -570,49 +570,98 @@ Technical Details: {str(e)}
     
     step_end_time = time.time()
     print(f"✅ Video downloaded in {step_end_time - step_start_time:.2f}s: {downloaded_file}")
-    
-def draw_end_cta_overlay(frame, text="LIKE & FOLLOW FOR MORE!"):
+    return downloaded_file, video_title
+
+def draw_end_cta_overlay(frame, text="Follow me for more such content", fade_in=1.0):
     """
-    Overlays a sleek Call-To-Action end card during the final seconds of a video clip.
+    Renders a premium black frame Call-To-Action outro screen at the end of the video.
     """
     h, w, _ = frame.shape
-    banner_h = 110
-    banner_w = int(w * 0.88)
-    banner_x = (w - banner_w) // 2
-    banner_y = int(h * 0.78)
 
-    overlay = frame.copy()
-    # Dark background box
-    cv2.rectangle(overlay, (banner_x, banner_y), (banner_x + banner_w, banner_y + banner_h), (15, 15, 20), -1)
-    
-    # Gold accent border
-    cv2.rectangle(overlay, (banner_x, banner_y), (banner_x + banner_w, banner_y + banner_h), (0, 215, 255), 3)
+    # Create pitch black background
+    black_bg = np.zeros_like(frame)
 
-    # Semi-transparent blending
-    cv2.addWeighted(overlay, 0.88, frame, 0.12, 0, frame)
+    # Smooth fade to black
+    fade_in = max(0.0, min(1.0, float(fade_in)))
+    if fade_in < 1.0:
+        base_frame = cv2.addWeighted(frame, 1.0 - fade_in, black_bg, fade_in, 0)
+    else:
+        base_frame = black_bg.copy()
 
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.95
-    thickness = 2
+    # If fade-in is very low, let video transition cleanly before text becomes intense
+    text_alpha = min(1.0, fade_in * 1.4)
+    if text_alpha <= 0.05:
+        return base_frame
 
-    # Clean text for OpenCV rendering
     clean_text = text.encode('ascii', 'ignore').decode('ascii').strip()
     if not clean_text:
-        clean_text = "LIKE & FOLLOW FOR MORE!"
+        clean_text = "Follow me for more such content"
 
-    (text_w, text_h), _ = cv2.getTextSize(clean_text, font, font_scale, thickness)
-    text_x = banner_x + (banner_w - text_w) // 2
-    text_y = banner_y + (banner_h + text_h) // 2
+    # Multi-line wrap if text is long
+    words = clean_text.split()
+    lines = []
+    curr = []
+    max_chars_per_line = 24
+    for word in words:
+        if sum(len(w) for w in curr) + len(curr) + len(word) > max_chars_per_line and curr:
+            lines.append(' '.join(curr))
+            curr = [word]
+        else:
+            curr.append(word)
+    if curr:
+        lines.append(' '.join(curr))
 
-    # Black text outline
-    cv2.putText(frame, clean_text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 3, cv2.LINE_AA)
-    # Bright white text
-    cv2.putText(frame, clean_text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    overlay = base_frame.copy()
 
-    return frame
+    # Draw sleek accent capsule above text
+    capsule_w = int(w * 0.38)
+    capsule_h = 58
+    capsule_x = (w - capsule_w) // 2
+    center_y = int(h * 0.48)
+    capsule_y = center_y - 120
+
+    # Rounded pill / box for CTA badge
+    cv2.rectangle(overlay, (capsule_x, capsule_y), (capsule_x + capsule_w, capsule_y + capsule_h), (25, 25, 30), -1)
+    # Subtle gold accent border (amber gold: (0, 195, 255) BGR)
+    cv2.rectangle(overlay, (capsule_x, capsule_y), (capsule_x + capsule_w, capsule_y + capsule_h), (0, 195, 255), 2)
+
+    badge_font = cv2.FONT_HERSHEY_SIMPLEX
+    badge_scale = 0.72
+    badge_thick = 2
+    badge_text = "+ FOLLOW"
+    (bw, bh), _ = cv2.getTextSize(badge_text, badge_font, badge_scale, badge_thick)
+    cv2.putText(overlay, badge_text, (capsule_x + (capsule_w - bw) // 2, capsule_y + (capsule_h + bh) // 2),
+                badge_font, badge_scale, (0, 215, 255), badge_thick, cv2.LINE_AA)
+
+    # Main text styling (bold, modern, centered)
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 1.15
+    thickness = 2
+    line_spacing = 65
+    start_y = center_y + 15
+
+    for i, line in enumerate(lines):
+        (tw, th), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        tx = (w - tw) // 2
+        ty = start_y + (i * line_spacing)
+
+        # Soft dark glow behind text
+        cv2.putText(overlay, line, (tx, ty), font, font_scale, (0, 0, 0), thickness + 4, cv2.LINE_AA)
+        # Bright white text
+        cv2.putText(overlay, line, (tx, ty), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+    # Subtle bottom accent line
+    line_w = int(w * 0.28)
+    line_y = start_y + (len(lines) * line_spacing) + 40
+    cv2.line(overlay, ((w - line_w) // 2, line_y), ((w + line_w) // 2, line_y), (70, 70, 75), 2)
+
+    # Blend overlay according to text_alpha
+    if text_alpha < 1.0:
+        return cv2.addWeighted(overlay, text_alpha, base_frame, 1.0 - text_alpha, 0)
+    return overlay
 
 
-def process_video_to_vertical(input_video, final_output_video, crop_mode='auto', end_cta="LIKE & FOLLOW FOR MORE!"):
+def process_video_to_vertical(input_video, final_output_video, crop_mode='auto', end_cta="Follow me for more such content"):
     """
     Core logic to convert horizontal video to vertical using scene detection and Active Speaker Tracking (MediaPipe).
     crop_mode: 
@@ -672,8 +721,9 @@ def process_video_to_vertical(input_video, final_output_video, crop_mode='auto',
         'ffmpeg', '-y', '-f', 'rawvideo', '-vcodec', 'rawvideo',
         '-s', f'{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}', '-pix_fmt', 'bgr24',
         '-r', str(fps), '-i', '-',
-        '-vf', 'unsharp=5:5:1.5,eq=brightness=0.06:contrast=1.1:saturation=1.15',
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-an', temp_video_output
+        '-vf', 'unsharp=5:5:1.5,eq=brightness=0.06:contrast=1.1:saturation=1.15,setsar=1',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '18',
+        '-aspect', '9:16', '-movflags', '+faststart', '-an', temp_video_output
     ]
 
     ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -742,11 +792,14 @@ def process_video_to_vertical(input_video, final_output_video, crop_mode='auto',
                 else:
                     output_frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
 
-            # Apply End-of-Clip Call-To-Action overlay in final 2.5 seconds
+            # Apply End-of-Clip Call-To-Action black frame in final 2.0 seconds
             if end_cta:
-                cta_frames = int(2.5 * fps)
+                cta_duration_sec = 2.0
+                cta_frames = int(cta_duration_sec * fps)
                 if total_frames > cta_frames and frame_number >= (total_frames - cta_frames):
-                    output_frame = draw_end_cta_overlay(output_frame, text=end_cta)
+                    cta_frame_idx = frame_number - (total_frames - cta_frames)
+                    fade_progress = min(1.0, cta_frame_idx / max(1, int(0.35 * fps)))
+                    output_frame = draw_end_cta_overlay(output_frame, text=end_cta, fade_in=fade_progress)
 
             ffmpeg_process.stdin.write(output_frame.tobytes())
             frame_number += 1
@@ -776,12 +829,13 @@ def process_video_to_vertical(input_video, final_output_video, crop_mode='auto',
     if os.path.exists(temp_audio_output):
         merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output, '-i', temp_audio_output,
-            '-c:v', 'copy', '-c:a', 'copy', final_output_video
+            '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+            '-aspect', '9:16', '-movflags', '+faststart', final_output_video
         ]
     else:
-         merge_command = [
+        merge_command = [
             'ffmpeg', '-y', '-i', temp_video_output,
-            '-c:v', 'copy', final_output_video
+            '-c:v', 'copy', '-aspect', '9:16', '-movflags', '+faststart', final_output_video
         ]
         
     try:
@@ -1024,7 +1078,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
     parser.add_argument('-m', '--model', type=str, default='gemini-2.5-flash', help="AI model name for clip detection.")
     parser.add_argument('--crop-mode', type=str, choices=['auto', 'full', 'fit'], default='auto', help="Framing mode: 'full' (100% video, no bars), 'fit' (fit width with blurred bars), 'auto' (smart AI).")
-    parser.add_argument('--end-cta', type=str, default="LIKE & FOLLOW FOR MORE!", help="Call-To-Action text for end-of-clip banner frame.")
+    parser.add_argument('--end-cta', type=str, default="Follow me for more such content", help="Call-To-Action text for end-of-clip black frame outro.")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
     parser.add_argument('--skip-analysis', action='store_true', help="Skip AI analysis and convert the whole video.")
     

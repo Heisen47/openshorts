@@ -215,9 +215,10 @@ def burn_subtitles(video_path, srt_path, output_path, alignment=2, fontsize=16,
     cmd = [
         'ffmpeg', '-y',
         '-i', video_path,
-        '-vf', f"subtitles='{safe_srt_path}':force_style='{style_string}'",
+        '-vf', f"subtitles='{safe_srt_path}':force_style='{style_string}',setsar=1",
         '-c:a', 'copy',
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '18',
+        '-aspect', '9:16', '-movflags', '+faststart',
         output_path
     ]
 

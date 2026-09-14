@@ -5,13 +5,14 @@ import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
+import { OutroOverlay } from "./OutroOverlay";
 
 /**
  * Main composition that layers all post-processing on top of the base video.
  * Uses @remotion/media Video for browser-side rendering compatibility.
  */
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
-  const { videoUrl, subtitles, hook, effects } =
+  const { videoUrl, subtitles, hook, effects, endCta } =
     rawProps as unknown as ShortVideoProps;
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -28,6 +29,13 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
 
       {/* Layer 3: Hook text overlay */}
       {hook && <HookOverlay config={hook} />}
+
+      {/* Layer 4: End CTA black frame outro */}
+      {endCta && (
+        <OutroOverlay
+          text={typeof endCta === "string" ? endCta : "Follow me for more such content"}
+        />
+      )}
     </AbsoluteFill>
   );
 };

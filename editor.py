@@ -340,7 +340,8 @@ class VideoEditor:
             'ffmpeg', '-y',
             '-i', input_path,
             '-vf', filter_string,
-            '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '18',
+            '-aspect', '9:16', '-movflags', '+faststart',
             '-c:a', 'copy',
             output_path
         ]

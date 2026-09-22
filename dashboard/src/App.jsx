@@ -180,7 +180,7 @@ function App() {
   const [outputStyle, setOutputStyle] = useState(() => localStorage.getItem('output_style') || 'shorts');
   const [showCompilationModal, setShowCompilationModal] = useState(false);
   const [compilationHook, setCompilationHook] = useState('Wait for the last one 💙😭');
-  const [compilationTitle, setCompilationTitle] = useState('CS2 FUNNY MOMENTS');
+  const compilationTitle = 'cs__clipz_';
   const [compilationKeepSlot1Blank, setCompilationKeepSlot1Blank] = useState(true);
 
   const handleSelectOutputStyle = (style) => {
@@ -1067,15 +1067,14 @@ function App() {
                       </div>
                       <div>
                         <label className="text-[11px] font-bold text-red-400 block mb-1">
-                          Series Title Watermark (Red Outline)
+                          Series Title Watermark (Hardcoded)
                         </label>
-                        <input
-                          type="text"
-                          value={compilationTitle}
-                          onChange={(e) => setCompilationTitle(e.target.value)}
-                          placeholder="CS2 FUNNY MOMENTS"
-                          className="w-full bg-black/50 border border-white/10 text-white text-xs font-bold uppercase rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
-                        />
+                        <div className="w-full bg-black/50 border border-red-500/40 text-red-500 text-xs font-black rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                          <span>cs__clipz_</span>
+                          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-bold border border-red-500/30">
+                            Locked
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}

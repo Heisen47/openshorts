@@ -51,7 +51,7 @@ export const CompilationVideo: React.FC<Record<string, unknown>> = (rawProps) =>
   const clips = props.clips || [];
   const overlayConfig = props.overlay || {
     hookText: "Wait for the last one 💙😭",
-    seriesTitle: "CS2 FUNNY MOMENTS",
+    seriesTitle: "cs__clipz_",
     totalSlots: 5,
     keepSlot1Blank: true,
   };

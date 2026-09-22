@@ -64,7 +64,7 @@ export const CompilationOverlay: React.FC<CompilationOverlayProps> = ({
         </div>
       </div>
 
-      {/* 2. Series Title (Below hook, bold condensed red font with black/white outline stroke) */}
+      {/* 2. Series Watermark (Below hook, bold condensed red font with black/white outline stroke, hardcoded cs__clipz_) */}
       <div
         style={{
           position: "absolute",
@@ -83,7 +83,6 @@ export const CompilationOverlay: React.FC<CompilationOverlayProps> = ({
             fontSize: 54,
             fontWeight: 900,
             color: "#FF1E1E", // Bold punchy red
-            textTransform: "uppercase",
             letterSpacing: "2.5px",
             textAlign: "center",
             lineHeight: 1.1,
@@ -98,7 +97,7 @@ export const CompilationOverlay: React.FC<CompilationOverlayProps> = ({
             `,
           }}
         >
-          {config.seriesTitle}
+          cs__clipz_
         </div>
       </div>
 

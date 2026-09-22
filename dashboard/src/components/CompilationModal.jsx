@@ -1,26 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Player } from '@remotion/player';
-import { X, Sparkles, Download, Film, Sliders, Play, Check, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { X, Sparkles, Download, Film, Sliders, Play, Check, AlertCircle, RefreshCw, Layers, Lock } from 'lucide-react';
 import { CompilationVideo } from '../remotion/compositions/compilation/CompilationVideo';
 import { renderCompilationInBrowser, downloadBlobUrl } from '../lib/renderInBrowser';
 import { getApiUrl } from '../config';
 
-export default function CompilationModal({
-    isOpen,
-    onClose,
-    clips = [],
-    initialHook = "Wait for the last one 💙😭",
-    initialTitle = "CS2 FUNNY MOMENTS",
-    initialKeepSlot1Blank = true,
-}) {
-    // 1. Overlay settings
-    const [hookText, setHookText] = useState(initialHook);
-    const [seriesTitle, setSeriesTitle] = useState(initialTitle);
-    const [keepSlot1Blank, setKeepSlot1Blank] = useState(initialKeepSlot1Blank);
+const getHighlightKeyword = (text) => {
+    if (!text) return 'HE';
+    const words = text.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+    if (words.length === 0) return 'HE';
+    const sorted = [...words].sort((a, b) => b.length - a.length);
+    return sorted[0].toUpperCase();
+};
 
-    // 2. Map existing clips or generate 5 countdown slots
-    const [compilationClips, setCompilationClips] = useState(() => {
-        // Build 5 slots (5, 4, 3, 2, 1)
+const formatPunchline = (rawTitle, fallback) => {
+    if (!rawTitle) return fallback;
+    const clean = rawTitle.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim();
+    return clean.length > 25 ? clean.substring(0, 22) + '...' : clean;
+};
+
+const buildCompilationClips = (sourceClips) => {
+    if (!sourceClips || sourceClips.length === 0) {
         const slotNumbers = [5, 4, 3, 2, 1];
         const defaultPunchlines = [
             "2B 4A",
@@ -36,22 +36,70 @@ export default function CompilationModal({
             { style: "impact", text: "WAIT TILL YOU SEE WHAT HAPPENS NEXT", highlightKeyword: "SEE" },
             { style: "impact", text: "FOLLOW FOR PART TWO", highlightKeyword: "TWO" },
         ];
+        return slotNumbers.map((slotNum, i) => ({
+            id: `comp-clip-${slotNum}`,
+            slotNumber: slotNum,
+            videoUrl: "",
+            durationInFrames: 360,
+            punchline: defaultPunchlines[i],
+            caption: defaultCaptions[i],
+        }));
+    }
 
-        return slotNumbers.map((slotNum, i) => {
-            const sourceClip = clips && clips[i];
-            const videoUrl = sourceClip?.video_url ? getApiUrl(sourceClip.video_url) : "";
-            const punchline = sourceClip?.video_title_for_youtube_short || defaultPunchlines[i];
+    const count = sourceClips.length;
+    // Leave slot 1 as the withheld retention bait
+    const totalSlots = Math.max(count + 1, 5);
 
-            return {
-                id: `comp-clip-${slotNum}`,
-                slotNumber: slotNum,
-                videoUrl,
-                durationInFrames: 360, // 12 seconds each at 30 fps -> 60s total
-                punchline,
-                caption: defaultCaptions[i],
-            };
-        });
+    return sourceClips.map((c, i) => {
+        const rawUrl = c.video_url || c.url || '';
+        const videoUrl = rawUrl ? getApiUrl(rawUrl) : '';
+        const slotNum = totalSlots - i;
+        const rawTitle = c.video_title_for_youtube_short || c.video_title || `Clip #${i + 1}`;
+        const punchline = formatPunchline(rawTitle, `Clip #${slotNum}`);
+        const durationSec = (c.end && c.start) ? (c.end - c.start) : (c.duration || 12);
+        const durationInFrames = Math.max(90, Math.round(durationSec * 30));
+
+        const captionStyle = i % 2 === 0 ? 'quote' : 'impact';
+        const captionText = captionStyle === 'quote'
+            ? `"${rawTitle}"`
+            : rawTitle.toUpperCase();
+
+        return {
+            id: `comp-clip-${slotNum}-${i}`,
+            slotNumber: slotNum,
+            videoUrl,
+            durationInFrames,
+            punchline,
+            caption: {
+                style: captionStyle,
+                text: captionText,
+                highlightKeyword: getHighlightKeyword(rawTitle),
+            },
+        };
     });
+};
+
+export default function CompilationModal({
+    isOpen,
+    onClose,
+    clips = [],
+    initialHook = "Wait for the last one 💙😭",
+    initialKeepSlot1Blank = true,
+}) {
+    // 1. Overlay settings: watermark is hardcoded to cs__clipz_
+    const [hookText, setHookText] = useState(initialHook);
+    const seriesTitle = "cs__clipz_";
+    const [keepSlot1Blank, setKeepSlot1Blank] = useState(initialKeepSlot1Blank);
+
+    // 2. Map existing clips into compilation
+    const [compilationClips, setCompilationClips] = useState(() => buildCompilationClips(clips));
+
+    // Keep compilation clips synced whenever clips prop updates or modal opens
+    useEffect(() => {
+        if (clips && clips.length > 0) {
+            setCompilationClips(buildCompilationClips(clips));
+        }
+    }, [clips, isOpen]);
 
     const [isRendering, setIsRendering] = useState(false);
     const [renderProgress, setRenderProgress] = useState(0);
@@ -203,15 +251,14 @@ export default function CompilationModal({
 
                                 <div>
                                     <label className="text-xs font-medium text-zinc-300 block mb-1">
-                                        Watermark Title (Red Outline)
+                                        Watermark Title (Hardcoded)
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={seriesTitle}
-                                        onChange={(e) => setSeriesTitle(e.target.value)}
-                                        className="w-full bg-black/40 border border-white/10 text-white text-xs font-black uppercase rounded-lg px-3 py-2 focus:outline-none focus:border-red-500 transition-colors"
-                                        placeholder="CS2 FUNNY MOMENTS"
-                                    />
+                                    <div className="w-full bg-black/40 border border-red-500/40 text-red-500 text-xs font-black rounded-lg px-3 py-2 flex items-center justify-between">
+                                        <span className="tracking-wide">cs__clipz_</span>
+                                        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-bold border border-red-500/30 flex items-center gap-1">
+                                            <Lock size={10} /> Locked
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 

@@ -86,7 +86,7 @@ const DEFAULT_COMPILATION_PROPS: CompilationVideoProps = {
   },
   overlay: {
     hookText: "Wait for the last one 💙😭",
-    seriesTitle: "CS2 FUNNY MOMENTS",
+    seriesTitle: "cs__clipz_",
     totalSlots: 5,
     keepSlot1Blank: true,
   },

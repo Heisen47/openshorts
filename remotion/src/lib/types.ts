@@ -133,3 +133,84 @@ export const shortVideoPropsSchema = z.object({
   effects: effectsConfigSchema.nullable(),
   endCta: z.union([z.string(), z.boolean()]).nullable().optional(),
 });
+
+// --- Compilation Video Types & Schemas ---
+
+export type CaptionStyleType = "quote" | "impact";
+
+export interface ClipCaption {
+  style: CaptionStyleType;
+  text: string;
+  highlightKeyword?: string; // Highlighted in contrasting orange for "impact" style
+}
+
+export interface CompilationClip {
+  id: string;
+  videoUrl: string;
+  durationInFrames: number;
+  slotNumber: number; // e.g. 5, 4, 3, 2, 1
+  punchline: string; // Text revealed next to countdown number
+  caption?: ClipCaption | null;
+}
+
+export interface CompilationOverlayConfig {
+  hookText: string; // e.g. "Wait for the last one 💙😭"
+  seriesTitle: string; // e.g. "CS2 FUNNY MOMENTS"
+  totalSlots: number; // default 5
+  keepSlot1Blank: boolean; // default true: slot 1 withheld to bait watch-time / Part 2
+  slot1Placeholder?: string;
+}
+
+export interface CompilationContentRegion {
+  top: number; // default 330
+  height: number; // default 680 (330 to 1010)
+}
+
+export interface CompilationVideoProps {
+  clips: CompilationClip[];
+  overlay: CompilationOverlayConfig;
+  durationInFrames?: number;
+  fps?: number; // default 30
+  width?: number; // default 720
+  height?: number; // default 1280
+  contentRegion?: CompilationContentRegion;
+}
+
+export const clipCaptionSchema = z.object({
+  style: z.enum(["quote", "impact"]),
+  text: z.string(),
+  highlightKeyword: z.string().optional(),
+});
+
+export const compilationClipSchema = z.object({
+  id: z.string(),
+  videoUrl: z.string(),
+  durationInFrames: z.number().int().positive(),
+  slotNumber: z.number().int().min(1).max(20),
+  punchline: z.string(),
+  caption: clipCaptionSchema.nullable().optional(),
+});
+
+export const compilationOverlayConfigSchema = z.object({
+  hookText: z.string(),
+  seriesTitle: z.string(),
+  totalSlots: z.number().int().min(1).default(5),
+  keepSlot1Blank: z.boolean().default(true),
+  slot1Placeholder: z.string().optional(),
+});
+
+export const compilationContentRegionSchema = z.object({
+  top: z.number().default(330),
+  height: z.number().default(680),
+});
+
+export const compilationVideoPropsSchema = z.object({
+  clips: z.array(compilationClipSchema),
+  overlay: compilationOverlayConfigSchema,
+  durationInFrames: z.number().int().positive().optional(),
+  fps: z.number().positive().default(30),
+  width: z.number().int().positive().default(720),
+  height: z.number().int().positive().default(1280),
+  contentRegion: compilationContentRegionSchema.optional(),
+});
+

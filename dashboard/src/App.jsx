@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, Film } from 'lucide-react';
 import KeyInput, { MODEL_OPTIONS } from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
@@ -9,6 +9,7 @@ import ThumbnailStudio from './components/ThumbnailStudio';
 import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
+import CompilationModal from './components/CompilationModal';
 import { getApiUrl } from './config';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
@@ -174,6 +175,19 @@ function App() {
     setEndCtaText(text);
     localStorage.setItem('end_cta_text', text);
   };
+
+  // Output format/style state: 'shorts' | 'compilation' | 'both'
+  const [outputStyle, setOutputStyle] = useState(() => localStorage.getItem('output_style') || 'shorts');
+  const [showCompilationModal, setShowCompilationModal] = useState(false);
+  const [compilationHook, setCompilationHook] = useState('Wait for the last one 💙😭');
+  const [compilationTitle, setCompilationTitle] = useState('CS2 FUNNY MOMENTS');
+  const [compilationKeepSlot1Blank, setCompilationKeepSlot1Blank] = useState(true);
+
+  const handleSelectOutputStyle = (style) => {
+    setOutputStyle(style);
+    localStorage.setItem('output_style', style);
+  };
+
 
   // Social API State - Load encrypted or plain
   const [uploadPostKey, setUploadPostKey] = useState(() => {
@@ -393,18 +407,27 @@ function App() {
         'X-OpenRouter-Key': openRouterKey || '',
         'X-Selected-Model': selectedModel,
         'X-Crop-Mode': cropMode,
-        'X-End-CTA': activeCta
+        'X-End-CTA': activeCta,
+        'X-Output-Style': outputStyle
       };
 
       if (data.type === 'url') {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({ url: data.payload, model: selectedModel, crop_mode: cropMode, end_cta: activeCta, acknowledged: !!data.acknowledged });
+        body = JSON.stringify({
+          url: data.payload,
+          model: selectedModel,
+          crop_mode: cropMode,
+          end_cta: activeCta,
+          output_style: outputStyle,
+          acknowledged: !!data.acknowledged
+        });
       } else {
         const formData = new FormData();
         formData.append('file', data.payload);
         formData.append('model', selectedModel);
         formData.append('crop_mode', cropMode);
         formData.append('end_cta', activeCta);
+        formData.append('output_style', outputStyle);
         formData.append('acknowledged', data.acknowledged ? 'true' : 'false');
         body = formData;
       }
@@ -937,9 +960,9 @@ function App() {
                   </p>
                 </div>
 
-                {/* Model, Framing & End CTA Selector Control Bar */}
+                {/* Model, Framing, Output Style & End CTA Selector Control Bar */}
                 <div className="w-full bg-surface border border-white/5 rounded-2xl p-4 text-left shadow-lg space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* AI Model Selector */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
@@ -978,6 +1001,22 @@ function App() {
                       </select>
                     </div>
 
+                    {/* Output Style Selector (Standard Shorts vs Countdown Compilation vs Both) */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                        <Film size={14} className="text-yellow-400 shrink-0" /> Output Style
+                      </label>
+                      <select
+                        value={outputStyle}
+                        onChange={(e) => handleSelectOutputStyle(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 text-white text-xs font-medium rounded-xl px-3 py-2 focus:outline-none focus:border-yellow-400 transition-colors cursor-pointer truncate"
+                      >
+                        <option value="shorts">🎬 Shorts Only (Individual Clips)</option>
+                        <option value="compilation">🏆 Countdown Edit (720x1280 CS2)</option>
+                        <option value="both">⚡ Both (Shorts + Countdown Edit)</option>
+                      </select>
+                    </div>
+
                     {/* Permanent End CTA Selector & Remove Toggle Button */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
@@ -1010,6 +1049,36 @@ function App() {
                       />
                     </div>
                   </div>
+
+                  {/* Compilation Quick Config Banner when Compilation or Both is active */}
+                  {outputStyle !== 'shorts' && (
+                    <div className="pt-2 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/[0.02] p-3 rounded-xl border border-yellow-500/20">
+                      <div>
+                        <label className="text-[11px] font-bold text-yellow-300 block mb-1">
+                          Hook Line (Top)
+                        </label>
+                        <input
+                          type="text"
+                          value={compilationHook}
+                          onChange={(e) => setCompilationHook(e.target.value)}
+                          placeholder="Wait for the last one 💙😭"
+                          className="w-full bg-black/50 border border-white/10 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-red-400 block mb-1">
+                          Series Title Watermark (Red Outline)
+                        </label>
+                        <input
+                          type="text"
+                          value={compilationTitle}
+                          onChange={(e) => setCompilationTitle(e.target.value)}
+                          placeholder="CS2 FUNNY MOMENTS"
+                          className="w-full bg-black/50 border border-white/10 text-white text-xs font-bold uppercase rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <MediaInput onProcess={handleProcess} isProcessing={status === 'processing'} />
@@ -1094,18 +1163,57 @@ function App() {
                       ${results.cost_analysis.total_cost.toFixed(5)}
                     </span>
                   )}
-                  {results?.clips?.length > 1 && status === 'complete' && (
-                    <button
-                      onClick={() => setShowScheduleWeek(true)}
-                      className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 hover:from-purple-500/30 hover:to-indigo-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 rounded-full text-xs font-bold transition-all"
-                    >
-                      <Calendar size={14} />
-                      Programar Semana
-                    </button>
+                  {results?.clips?.length > 0 && status === 'complete' && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={() => setShowCompilationModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-red-500/20 to-yellow-500/20 hover:from-red-500/30 hover:to-yellow-500/30 border border-yellow-500/30 text-yellow-300 hover:text-yellow-200 rounded-full text-xs font-bold transition-all shadow-sm"
+                      >
+                        <Film size={14} />
+                        Countdown Edit (720x1280)
+                      </button>
+                      {results?.clips?.length > 1 && (
+                        <button
+                          onClick={() => setShowScheduleWeek(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 hover:from-purple-500/30 hover:to-indigo-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 rounded-full text-xs font-bold transition-all"
+                        >
+                          <Calendar size={14} />
+                          Programar Semana
+                        </button>
+                      )}
+                    </div>
                   )}
                 </h2>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                  {/* Countdown Compilation Featured Banner if compilation or both was selected */}
+                  {results?.clips?.length > 0 && (outputStyle === 'compilation' || outputStyle === 'both') && (
+                    <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-red-950/50 via-zinc-900 to-black border border-yellow-500/30 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center text-yellow-400 shrink-0">
+                          <Film size={20} />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            Countdown Compilation Edit Ready
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 font-mono border border-yellow-400/30">
+                              720x1280 9:16
+                            </span>
+                          </div>
+                          <div className="text-xs text-zinc-400 mt-0.5">
+                            {compilationTitle} • "{compilationHook}" • 5 synced countdown slots with retention bait
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowCompilationModal(true)}
+                        className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-red-500 to-yellow-500 hover:from-red-600 hover:to-yellow-600 text-black font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 shrink-0"
+                      >
+                        <Sparkles size={14} /> Open Compilation Studio
+                      </button>
+                    </div>
+                  )}
+
                   {results && results.clips && results.clips.length > 0 ? (
                     <div className={`grid gap-4 pb-10 ${status === 'complete' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
                       {results.clips.map((clip, i) => (
@@ -1240,6 +1348,15 @@ function App() {
         jobId={jobId}
         uploadPostKey={uploadPostKey}
         uploadUserId={uploadUserId}
+      />
+
+      <CompilationModal
+        isOpen={showCompilationModal}
+        onClose={() => setShowCompilationModal(false)}
+        clips={results?.clips || []}
+        initialHook={compilationHook}
+        initialTitle={compilationTitle}
+        initialKeepSlot1Blank={compilationKeepSlot1Blank}
       />
     </div>
   );

@@ -61,6 +61,60 @@ export async function renderInBrowser({
     return URL.createObjectURL(blob);
 }
 
+import { CompilationVideo } from '../remotion/compositions/compilation/CompilationVideo';
+
+/**
+ * Renders a CompilationVideo composition in the browser using WebCodecs.
+ */
+export async function renderCompilationInBrowser({
+    clips,
+    overlay,
+    contentRegion,
+    fps = 30,
+    width = 720,
+    height = 1280,
+    onProgress,
+    signal,
+}) {
+    const totalFrames = clips.reduce((acc, c) => acc + (c.durationInFrames || 360), 0);
+    const durationInFrames = Math.max(1, totalFrames);
+
+    const inputProps = {
+        clips,
+        overlay,
+        contentRegion: contentRegion || { top: 330, height: 680 },
+        fps,
+        width,
+        height,
+        durationInFrames,
+    };
+
+    const { getBlob } = await renderMediaOnWeb({
+        composition: {
+            component: CompilationVideo,
+            durationInFrames,
+            fps,
+            width,
+            height,
+            id: 'CompilationVideo',
+            calculateMetadata: null,
+        },
+        inputProps,
+        container: 'mp4',
+        videoCodec: 'h264',
+        videoBitrate: 'high',
+        audioCodec: 'aac',
+        onProgress: onProgress
+            ? ({ progress }) => onProgress(progress)
+            : undefined,
+        signal,
+    });
+
+    const blob = await getBlob();
+    return URL.createObjectURL(blob);
+}
+
+
 /**
  * Triggers a download of a blob URL as an MP4 file.
  */

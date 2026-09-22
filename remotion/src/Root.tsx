@@ -1,8 +1,9 @@
 import React from "react";
 import { Composition } from "remotion";
 import { ShortVideo } from "./compositions/ShortVideo";
-import type { ShortVideoProps } from "./lib/types";
-import { shortVideoPropsSchema } from "./lib/types";
+import { CompilationVideo } from "./compositions/compilation/CompilationVideo";
+import type { ShortVideoProps, CompilationVideoProps } from "./lib/types";
+import { shortVideoPropsSchema, compilationVideoPropsSchema } from "./lib/types";
 
 const DEFAULT_PROPS: ShortVideoProps = {
   videoUrl: "",
@@ -72,6 +73,85 @@ const DEFAULT_PROPS: ShortVideoProps = {
   },
 };
 
+
+
+const DEFAULT_COMPILATION_PROPS: CompilationVideoProps = {
+  width: 720,
+  height: 1280,
+  fps: 30,
+  durationInFrames: 1800, // 60s total
+  contentRegion: {
+    top: 330,
+    height: 680,
+  },
+  overlay: {
+    hookText: "Wait for the last one 💙😭",
+    seriesTitle: "CS2 FUNNY MOMENTS",
+    totalSlots: 5,
+    keepSlot1Blank: true,
+  },
+  clips: [
+    {
+      id: "clip-5",
+      slotNumber: 5,
+      videoUrl: "",
+      durationInFrames: 360, // 12s
+      punchline: "2B 4A",
+      caption: {
+        style: "quote",
+        text: '"Six seven!" :D',
+      },
+    },
+    {
+      id: "clip-4",
+      slotNumber: 4,
+      videoUrl: "",
+      durationInFrames: 360, // 12s
+      punchline: "ninja defuse fail",
+      caption: {
+        style: "impact",
+        text: "WHY DOES HE SOUND RUSSIAN WHEN HE—",
+        highlightKeyword: "HE",
+      },
+    },
+    {
+      id: "clip-3",
+      slotNumber: 3,
+      videoUrl: "",
+      durationInFrames: 360, // 12s
+      punchline: "headshot through smoke",
+      caption: {
+        style: "quote",
+        text: '"Bro is NOT s1mple" 💀',
+      },
+    },
+    {
+      id: "clip-2",
+      slotNumber: 2,
+      videoUrl: "",
+      durationInFrames: 360, // 12s
+      punchline: "dragon rroorr",
+      caption: {
+        style: "impact",
+        text: "WAIT TILL YOU SEE WHAT HAPPENS NEXT",
+        highlightKeyword: "SEE",
+      },
+    },
+    {
+      id: "clip-cliffhanger",
+      slotNumber: 1, // Deliberately keeps slot 1 punchline blank on screen
+      videoUrl: "",
+      durationInFrames: 360, // 12s
+      punchline: "part 2 cliffhanger",
+      caption: {
+        style: "impact",
+        text: "FOLLOW FOR PART TWO",
+        highlightKeyword: "TWO",
+      },
+    },
+  ],
+};
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
@@ -85,6 +165,17 @@ export const RemotionRoot: React.FC = () => {
         height={DEFAULT_PROPS.height}
         defaultProps={DEFAULT_PROPS}
       />
+      <Composition
+        id="CompilationVideo"
+        schema={compilationVideoPropsSchema}
+        component={CompilationVideo}
+        durationInFrames={DEFAULT_COMPILATION_PROPS.durationInFrames || 1800}
+        fps={DEFAULT_COMPILATION_PROPS.fps || 30}
+        width={DEFAULT_COMPILATION_PROPS.width || 720}
+        height={DEFAULT_COMPILATION_PROPS.height || 1280}
+        defaultProps={DEFAULT_COMPILATION_PROPS}
+      />
     </>
   );
 };
+

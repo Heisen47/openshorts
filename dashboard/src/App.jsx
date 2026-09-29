@@ -137,7 +137,13 @@ const pollJob = async (jobId) => {
 function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
   const [openRouterKey, setOpenRouterKey] = useState(() => localStorage.getItem('openrouter_key') || '');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('selected_model') || 'gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = localStorage.getItem('selected_model');
+    if (!saved || saved === 'gemini-2.5-flash' || saved === 'gemini-2.5-pro' || saved === 'gemini-2.0-flash' || saved === 'gemini-3.8-flash') {
+      return 'gemini-3.5-flash-lite';
+    }
+    return saved;
+  });
 
   const [cropMode, setCropMode] = useState(() => localStorage.getItem('crop_mode') || 'auto');
   const [enableEndCta, setEnableEndCta] = useState(() => localStorage.getItem('enable_end_cta') !== 'false');

@@ -5,10 +5,11 @@ export const MODEL_OPTIONS = [
     {
         category: "⚡ Google Gemini Models",
         items: [
-            { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", badge: "Default & Fast", desc: "Balanced speed and clip extraction accuracy." },
-            { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", badge: "Best Quality", desc: "Deep reasoning model for high-CTR clip selection." },
-            { id: "gemini-3-flash-preview", name: "Gemini 3.0 Flash Preview", badge: "Next Gen", desc: "Latest Gemini 3 multimodal architecture." },
-            { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", badge: "Ultra Fast", desc: "High-speed low-latency processing." }
+            { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", badge: "Recommended & Most Stable", desc: "Fast, resilient, and immune to 503 capacity limits." },
+            { id: "gemini-3-flash-preview", name: "Gemini 3.0 Flash Preview", badge: "Active", desc: "Gemini 3 multimodal architecture." },
+            { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", badge: "Standard", desc: "Previous generation Flash model." },
+            { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", badge: "High Demand (503 Spike)", desc: "Latest high-speed model with 1M context." },
+            { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", badge: "Pro / Paid Quota", desc: "Deep reasoning model for high-CTR clip selection." }
         ]
     },
     {
@@ -26,7 +27,7 @@ export default function KeyInput({
     savedKey, 
     savedOpenRouterKey = '', 
     onOpenRouterKeySet, 
-    selectedModel = 'gemini-2.5-flash', 
+    selectedModel = 'gemini-3.5-flash-lite', 
     onModelSelect 
 }) {
     const [geminiKey, setGeminiKey] = useState(savedKey || '');

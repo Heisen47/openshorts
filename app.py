@@ -324,7 +324,7 @@ async def process_endpoint(
     gemini_key = request.headers.get("X-Gemini-Key")
     openrouter_key = request.headers.get("X-OpenRouter-Key")
     deepseek_key = request.headers.get("X-DeepSeek-Key")
-    selected_model = request.headers.get("X-Selected-Model", "gemini-2.5-flash")
+    selected_model = request.headers.get("X-Selected-Model", "gemini-3.5-flash-lite")
     crop_mode = request.headers.get("X-Crop-Mode", "auto")
 
     ack_flag = str(acknowledged).lower() in ("1", "true", "yes")

@@ -1,4 +1,5 @@
 import time
+import random
 import cv2
 import scenedetect
 import subprocess
@@ -944,7 +945,7 @@ def call_openai_compatible_api(prompt: str, model_name: str):
         usage = data.get("usage", {})
         return content, usage
 
-def get_viral_clips(transcript_result, video_duration, model_name="gemini-2.5-flash"):
+def get_viral_clips(transcript_result, video_duration, model_name="gemini-3.5-flash-lite"):
     print(f"🤖  Analyzing with AI model: {model_name}...")
 
     # Extract words
@@ -1005,68 +1006,99 @@ def get_viral_clips(transcript_result, video_duration, model_name="gemini-2.5-fl
             return None
 
         client = genai.Client(api_key=api_key)
-        print(f"🤖  Initializing Gemini with model: {model_name}")
 
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            
-            # --- Cost Calculation ---
-            try:
-                usage = response.usage_metadata
-                if usage:
-                    input_price_per_million = 0.10
-                    output_price_per_million = 0.40
-                    
-                    prompt_tokens = usage.prompt_token_count
-                    output_tokens = usage.candidates_token_count
-                    
-                    input_cost = (prompt_tokens / 1_000_000) * input_price_per_million
-                    output_cost = (output_tokens / 1_000_000) * output_price_per_million
-                    total_cost = input_cost + output_cost
-                    
-                    cost_analysis = {
-                        "input_tokens": prompt_tokens,
-                        "output_tokens": output_tokens,
-                        "input_cost": input_cost,
-                        "output_cost": output_cost,
-                        "total_cost": total_cost,
-                        "model": model_name
-                    }
+        gemini_fallbacks = [
+            "gemini-3.5-flash-lite",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-3.8-flash",
+            "gemini-2.5-flash-lite"
+        ]
+        models_to_try = [model_name] + [m for m in gemini_fallbacks if m != model_name]
 
-                    print(f"💰 Token Usage ({model_name}):")
-                    print(f"   - Input Tokens: {prompt_tokens} (${input_cost:.6f})")
-                    print(f"   - Output Tokens: {output_tokens} (${output_cost:.6f})")
-                    print(f"   - Total Estimated Cost: ${total_cost:.6f}")
+        for current_model in models_to_try:
+            print(f"🤖  Initializing Gemini with model: {current_model}")
+            max_retries = 3
+            model_succeeded = False
+
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.generate_content(
+                        model=current_model,
+                        contents=prompt
+                    )
+
+                    # --- Cost Calculation ---
+                    try:
+                        usage = response.usage_metadata
+                        if usage:
+                            input_price_per_million = 0.10
+                            output_price_per_million = 0.40
+                            
+                            prompt_tokens = usage.prompt_token_count
+                            output_tokens = usage.candidates_token_count
+                            
+                            input_cost = (prompt_tokens / 1_000_000) * input_price_per_million
+                            output_cost = (output_tokens / 1_000_000) * output_price_per_million
+                            total_cost = input_cost + output_cost
+                            
+                            cost_analysis = {
+                                "input_tokens": prompt_tokens,
+                                "output_tokens": output_tokens,
+                                "input_cost": input_cost,
+                                "output_cost": output_cost,
+                                "total_cost": total_cost,
+                                "model": current_model
+                            }
+
+                            print(f"💰 Token Usage ({current_model}):")
+                            print(f"   - Input Tokens: {prompt_tokens} (${input_cost:.6f})")
+                            print(f"   - Output Tokens: {output_tokens} (${output_cost:.6f})")
+                            print(f"   - Total Estimated Cost: ${total_cost:.6f}")
+                    except Exception as e:
+                        print(f"⚠️ Could not calculate cost: {e}")
+                        cost_analysis = None
+                    # ------------------------
+
+                    # Clean response if it contains markdown code blocks
+                    text = response.text
+                    if text.startswith("```json"):
+                        text = text[7:]
+                    if text.endswith("```"):
+                        text = text[:-3]
+                    text = text.strip()
                     
-            except Exception as e:
-                print(f"⚠️ Could not calculate cost: {e}")
-                cost_analysis = None
-            # ------------------------
+                    start_idx = text.find('{')
+                    end_idx = text.rfind('}')
+                    if start_idx != -1 and end_idx != -1:
+                        text = text[start_idx:end_idx + 1]
 
-            # Clean response if it contains markdown code blocks
-            text = response.text
-            if text.startswith("```json"):
-                text = text[7:]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
-            
-            start_idx = text.find('{')
-            end_idx = text.rfind('}')
-            if start_idx != -1 and end_idx != -1:
-                text = text[start_idx:end_idx + 1]
+                    result_json = json.loads(text)
+                    if cost_analysis:
+                        result_json['cost_analysis'] = cost_analysis
+                        
+                    return result_json
 
-            result_json = json.loads(text)
-            if cost_analysis:
-                result_json['cost_analysis'] = cost_analysis
-                
-            return result_json
-        except Exception as e:
-            print(f"❌ Gemini Error: {e}")
-            return None
+                except Exception as e:
+                    err_msg = str(e)
+                    is_transient = any(code in err_msg for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "overloaded", "high demand"])
+                    is_not_found = any(code in err_msg for code in ["404", "NOT_FOUND", "not found", "no longer available"])
+
+                    if is_not_found:
+                        print(f"⚠️ Model '{current_model}' retired/unavailable (404). Trying next fallback model...")
+                        break
+                    elif is_transient and attempt < max_retries - 1:
+                        sleep_s = (attempt + 1) * 3 + random.uniform(0.5, 2.0)
+                        print(f"⚠️ Gemini 503/429 high demand spike on '{current_model}'. Retrying in {sleep_s:.1f}s (attempt {attempt+1}/{max_retries})...")
+                        time.sleep(sleep_s)
+                    else:
+                        print(f"❌ Gemini Error with '{current_model}': {e}")
+                        if current_model != models_to_try[-1]:
+                            print(f"🔄 Switching to fallback Gemini model...")
+                        break
+
+        print("❌ All Gemini models and retry attempts exhausted.")
+        return None
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="AutoCrop-Vertical with Viral Clip Detection.")
@@ -1076,7 +1108,7 @@ if __name__ == '__main__':
     input_group.add_argument('-u', '--url', type=str, help="YouTube URL to download and process.")
     
     parser.add_argument('-o', '--output', type=str, help="Output directory or file (if processing whole video).")
-    parser.add_argument('-m', '--model', type=str, default='gemini-2.5-flash', help="AI model name for clip detection.")
+    parser.add_argument('-m', '--model', type=str, default='gemini-3.5-flash-lite', help="AI model name for clip detection.")
     parser.add_argument('--crop-mode', type=str, choices=['auto', 'full', 'fit'], default='auto', help="Framing mode: 'full' (100% video, no bars), 'fit' (fit width with blurred bars), 'auto' (smart AI).")
     parser.add_argument('--end-cta', type=str, default="Follow me for more such content", help="Call-To-Action text for end-of-clip black frame outro.")
     parser.add_argument('--keep-original', action='store_true', help="Keep the downloaded YouTube video.")
